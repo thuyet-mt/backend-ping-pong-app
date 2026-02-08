@@ -3,12 +3,12 @@ package main
 import (
 	"backend-ping-pong-app/internal/config"
 	"backend-ping-pong-app/internal/database"
-	//"backend-ping-pong-app/internal/handlers"
-	//"backend-ping-pong-app/internal/middleware"
-	//"backend-ping-pong-app/internal/repository"
-	//"backend-ping-pong-app/internal/service"
+	"backend-ping-pong-app/internal/handlers"
+	"backend-ping-pong-app/internal/middleware"
+	"backend-ping-pong-app/internal/repository"
+	"backend-ping-pong-app/internal/service"
 
-	//"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin"
 	log "github.com/jeanphorn/log4go"
 )
 
@@ -32,20 +32,20 @@ func main() {
 	}
 	defer db.Close()
 
-	//repo := repository.NewRepository(db)
-	//svc := service.NewService(repo)
-	//
-	//router := gin.New()
-	//router.Use(
-	//	gin.Logger(),
-	//	gin.Recovery(),
-	//	middleware.CORS(),
-	//)
+	repo := repository.NewRepository(db)
+	svc := service.NewService(repo)
 
-	//handlers.RegisterRoutes(router, svc)
+	router := gin.New()
+	router.Use(
+		gin.Logger(),
+		gin.Recovery(),
+		middleware.CORS(),
+	)
+
+	handlers.RegisterRoutes(router, svc)
 
 	log.Info("🚀 Server running on :%s", cfg.App.Port)
-	//if err := router.Run(":" + cfg.App.Port); err != nil {
-	//	log.Fatal("Server failed: %v", err)
-	//}
+	if err := router.Run(":" + cfg.App.Port); err != nil {
+		log.Error("Server failed: %v", err)
+	}
 }
