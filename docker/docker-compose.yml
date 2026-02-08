@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: pingpong_db
+    environment:
+      POSTGRES_USER: pingpong_user
+      POSTGRES_PASSWORD: pingpong_password_2024
+      POSTGRES_DB: pingpong
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pingpong_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pingpong_network
+
+  backend:
+    build: .
+    container_name: pingpong_backend
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: pingpong_user
+      DB_PASSWORD: pingpong_password_2024
+      DB_NAME: pingpong
+      PORT: 8080
+      GIN_MODE: release
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./uploads:/app/uploads
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - pingpong_network
+
+volumes:
+  postgres_data:
+
+networks:
+  pingpong_network:
+    driver: bridge
