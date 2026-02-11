@@ -11,7 +11,8 @@ func RegisterRoutes(r *gin.Engine, svc *service.Service) {
 
 	v1 := r.Group("/api/v1")
 	{
-		v1.GET("/players", playerHandler.GetPlayers)
-		v1.POST("/players", playerHandler.CreatePlayer)
+		v1.GET("/players", playerHandler.GetPlayersHandle)
+		v1.GET("/players/search", playerHandler.SearchPlayersHandle)
+		v1.POST("/players", playerHandler.CreatePlayerHandle)
 	}
 }

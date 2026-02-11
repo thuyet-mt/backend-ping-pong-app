@@ -12,46 +12,40 @@ type playerRepository struct {
 }
 
 type PlayerRepository interface {
-	GetAll(ctx context.Context) ([]models.Player, error)
-	GetByID(ctx context.Context, id string) (*models.Player, error)
-	Create(ctx context.Context, p *models.Player) error
+	GetAllPlayerRepo(ctx context.Context) ([]models.PlayerListResponse, error)
+	SearchByNameRepo(ctx context.Context, name string) ([]models.PlayerListResponse, error)
+	CreatePlayerRepo(ctx context.Context, p *models.Player) error
 }
 
-func (r *playerRepository) GetAll(ctx context.Context) ([]models.Player, error) {
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT 
-			id,
+func (r *playerRepository) GetAllPlayerRepo(ctx context.Context) ([]models.PlayerListResponse, error) {
+	queryGetAllPlayer := `
+		SELECT
 			full_name,
 			birth_year,
-			phone,
-			avatar_url,
-			created_at
+			avatar_url
 		FROM players
-		ORDER BY created_at DESC
-	`)
+		ORDER BY created_at DESC;`
+	rows, err := r.db.QueryContext(ctx, queryGetAllPlayer)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var players []models.Player
+	var PlayerListResponses []models.PlayerListResponse
 
 	for rows.Next() {
-		var p models.Player
+		var p models.PlayerListResponse
 		if err := rows.Scan(
-			&p.ID,
 			&p.FullName,
 			&p.BirthYear,
-			&p.Phone,
-			&p.AvatarURL,
-			&p.CreatedAt,
+			&p.AvatarPath,
 		); err != nil {
 			return nil, err
 		}
-		players = append(players, p)
+		PlayerListResponses = append(PlayerListResponses, p)
 	}
 
-	return players, nil
+	return PlayerListResponses, nil
 }
 
 func (r *playerRepository) GetByID(ctx context.Context, id string) (*models.Player, error) {
@@ -87,7 +81,43 @@ func (r *playerRepository) GetByID(ctx context.Context, id string) (*models.Play
 	return &p, nil
 }
 
-func (r *playerRepository) Create(ctx context.Context, p *models.Player) error {
+func (r *playerRepository) SearchByNameRepo(ctx context.Context, name string) ([]models.PlayerListResponse, error) {
+	var PlayerListResponses []models.PlayerListResponse
+
+	querySearchByName := `
+		SELECT 
+			full_name,
+			birth_year,
+			avatar_url
+		FROM players 
+		WHERE full_name ILIKE '%' || $1 || '%'
+	`
+
+	rows, err := r.db.QueryContext(ctx, querySearchByName, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var p models.PlayerListResponse
+		if err := rows.Scan(
+			&p.FullName,
+			&p.BirthYear,
+			&p.AvatarPath,
+		); err != nil {
+			return nil, err
+		}
+		PlayerListResponses = append(PlayerListResponses, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return PlayerListResponses, nil
+}
+
+func (r *playerRepository) CreatePlayerRepo(ctx context.Context, p *models.Player) error {
 	return r.db.QueryRowContext(ctx, `
 		INSERT INTO players (
 			full_name,

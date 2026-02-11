@@ -1,281 +1,441 @@
-# 📘 TÀI LIỆU CƠ SỞ DỮ LIỆU – HANOI SUPER LEAGUE (PINGPONG)
+Dưới đây là **tài liệu thiết kế DB hoàn chỉnh (Final Version)** cho hệ thống League Pingpong, đã bao gồm:
 
-Tài liệu này mô tả **đầy đủ kiến trúc database**, cách **khởi tạo**, **cấu hình**, và **viết query chuẩn** cho hệ thống giải đấu bóng bàn, phục vụ **Flutter App (FE)** và **Go Backend (BE)**.
+* Multi-season
+* Transfer giữa đội
+* Snapshot ranking theo round
+* Rating (ELO)
+* Buffer ±25 chống nhảy hạng
+* Snapshot standings tối ưu performance
 
----
-
-## 1. Tổng quan kiến trúc
-
-### 🎯 Mục tiêu thiết kế
-
-* Scale tốt (nhiều mùa giải, nhiều VĐV)
-* Không mất lịch sử (audit & analytics)
-* Phù hợp giải truyền thống + BTC can thiệp
-* Query đơn giản, rõ ràng
-
-### 🧱 Phân tầng dữ liệu
-
-| Tầng        | Mô tả                   |
-| ----------- | ----------------------- |
-| Core        | players, teams, ranks   |
-| Season      | seasons, player_seasons |
-| Competition | fixtures, matches       |
-| Analytics   | player_point_logs       |
-| Import      | staging_players         |
+Tài liệu này có thể cho team BE Go để thiết kế API.
 
 ---
 
-## 2. Khởi tạo Database
+# I. Tổng Quan Kiến Trúc
 
-### 2.1 Tạo database
+Hệ thống được thiết kế theo mô hình:
 
-```sql
-CREATE DATABASE pingpong
-  WITH OWNER = postgres
-  ENCODING = 'UTF8'
-  LC_COLLATE = 'en_US.UTF-8'
-  LC_CTYPE = 'en_US.UTF-8';
-```
+> Season-based League System với Snapshot Ranking
 
-### 2.2 Extension bắt buộc
+Mỗi mùa (Season) là một không gian dữ liệu độc lập.
 
-```sql
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-```
+Hệ thống chia thành 6 domain:
+
+1. Season Management
+2. Team Management
+3. Player Management
+4. Match Engine
+5. Ranking & Rating Engine
+6. Configuration (Rank System)
 
 ---
 
-## 3. Các bảng chính
+# II. ERD Logic (Quan hệ tổng thể)
 
-### 3.1 ranks – Hạng trình độ
+```markdown
+seasons
+ ├── teams
+ │     └── team_members
+ │
+ ├── rounds
+ │
+ ├── matches
+ │     └── sub_matches
+ │           └── match_player_points
+ │
+ ├── player_round_points
+ │     └── player_round_standings
+ │
+ ├── player_ratings
+ │
+ └── team_standings
 
-```sql
-CREATE TABLE ranks (
-  id VARCHAR(10) PRIMARY KEY,
-  sort_order INT NOT NULL,
-  min_score INT,
-  max_score INT,
-  standard_score INT,
-  description TEXT
-);
-```
+players
+ ├── player_ratings
+ ├── player_round_points
+ ├── player_round_standings
+ └── player_rank_history
 
-Dùng cho:
-
-* Tính chấp
-* Xếp hạng
-* Analytics
-
----
-
-### 3.2 teams – Đội bóng
-
-```sql
-CREATE TABLE teams (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  short_name TEXT,
-  logo_url TEXT,
-  created_at TIMESTAMP DEFAULT now()
-);
+rank_configs
 ```
 
 ---
 
-### 3.3 players – Vận động viên (master)
+# III. Domain Chi Tiết
+
+---
+
+# 1️⃣ SEASON DOMAIN
+
+## seasons
+
+Mỗi record đại diện một mùa giải.
+
+| Cột        | Mô tả                        |
+| ---------- | ---------------------------- |
+| id         | UUID                         |
+| name       | Tên mùa                      |
+| start_date | Ngày bắt đầu                 |
+| end_date   | Ngày kết thúc                |
+| status     | UPCOMING / ACTIVE / FINISHED |
+
+Rule:
+
+* Chỉ có 1 season ACTIVE tại một thời điểm (enforce ở BE).
+
+---
+
+## rounds
+
+Quản lý trạng thái từng vòng.
+
+| Cột          | Mô tả                     |
+| ------------ | ------------------------- |
+| season_id    | FK                        |
+| round_number | Số vòng                   |
+| status       | OPEN / LOCKED / FINALIZED |
+
+Rule:
+
+* Không cho sửa match nếu round = FINALIZED
+* FINALIZED chỉ chạy 1 lần
+* UNIQUE(season_id, round_number)
+
+---
+
+# 2️⃣ TEAM DOMAIN
+
+## teams
+
+Đội thi đấu trong một season.
+
+| Cột       | Mô tả   |
+| --------- | ------- |
+| id        | UUID    |
+| season_id | FK      |
+| name      | Tên đội |
+
+UNIQUE(season_id, name)
+
+---
+
+## team_members
+
+Quan hệ player – team theo mùa.
+
+| Cột           | Mô tả              |
+| ------------- | ------------------ |
+| team_id       | FK                 |
+| player_id     | FK                 |
+| joined_round  | Round bắt đầu      |
+| left_round    | Round rời          |
+| transfer_type | INITIAL / TRANSFER |
+
+Rule:
+
+* joined_round > 0
+* left_round >= joined_round
+
+Cho phép:
+
+* Transfer giữa vòng
+* Player chơi nhiều season
+
+---
+
+# 3️⃣ PLAYER DOMAIN
+
+## players
+
+Thông tin cố định, không phụ thuộc season.
+
+| Cột           | Mô tả     |
+| ------------- | --------- |
+| id            | UUID      |
+| full_name     | Tên       |
+| date_of_birth | Ngày sinh |
+| gender        | Giới tính |
+
+---
+
+# 4️⃣ RATING & RANK SYSTEM
+
+---
+
+## rank_configs
+
+Định nghĩa hệ thống hạng và buffer ±25.
+
+| Cột               | Mô tả          |
+| ----------------- | -------------- |
+| rank              | F1, E2…        |
+| min_points        | Điểm tối thiểu |
+| max_points        | Điểm tối đa    |
+| promotion_buffer  | Mặc định 25    |
+| relegation_buffer | Mặc định 25    |
+
+Rank không còn phụ thuộc trực tiếp vào điểm.
+Nó là một state machine.
+
+---
+
+## player_ratings
+
+Trạng thái player theo từng season.
+
+| Cột                | Mô tả           |
+| ------------------ | --------------- |
+| player_id          | FK              |
+| season_id          | FK              |
+| points             | Rating hiện tại |
+| rank               | Rank hiện tại   |
+| accumulated_points | Tổng điểm mùa   |
+| updated_at         | Timestamp       |
+
+UNIQUE(player_id, season_id)
+
+Đây là bảng để load leaderboard nhanh.
+
+---
+
+## player_rank_history
+
+Lưu lịch sử lên / xuống hạng.
+
+| Cột          | Mô tả         |
+| ------------ | ------------- |
+| player_id    | FK            |
+| season_id    | FK            |
+| round_number | Vòng thay đổi |
+| old_rank     | Hạng cũ       |
+| new_rank     | Hạng mới      |
+
+---
+
+# 5️⃣ MATCH ENGINE
+
+---
+
+## matches
+
+Trận đấu giữa 2 đội.
+
+| Cột          | Mô tả                           |
+| ------------ | ------------------------------- |
+| season_id    | FK                              |
+| round_number | Round                           |
+| home_team_id | FK                              |
+| away_team_id | FK                              |
+| home_points  | Điểm đội                        |
+| away_points  | Điểm đội                        |
+| status       | PENDING / COMPLETED / FINALIZED |
+
+Rule:
+
+* home_team_id != away_team_id
+
+---
+
+## sub_matches
+
+Tối đa 9 trận con.
+
+| Cột            | Mô tả           |
+| -------------- | --------------- |
+| match_order    | 1–9             |
+| match_type     | SINGLE / DOUBLE |
+| home_player1   | FK              |
+| home_player2   | FK              |
+| away_player1   | FK              |
+| away_player2   | FK              |
+| home_sets      |                 |
+| away_sets      |                 |
+| winner_team_id | FK              |
+
+UNIQUE(match_id, match_order)
+
+---
+
+## match_player_points
+
+Delta rating (ELO change).
+
+| Cột          | Mô tả |
+| ------------ | ----- |
+| sub_match_id | FK    |
+| player_id    | FK    |
+| delta_points | +/-   |
+
+UNIQUE(sub_match_id, player_id)
+
+---
+
+# 6️⃣ ROUND POINT SYSTEM (Season Points)
+
+---
+
+## player_round_points
+
+Điểm tích lũy từng vòng.
+
+| Cột           | Mô tả        |
+| ------------- | ------------ |
+| player_id     | FK           |
+| season_id     | FK           |
+| round_number  |              |
+| points_earned | Điểm vòng đó |
+
+UNIQUE(player_id, season_id, round_number)
+
+---
+
+## player_round_standings
+
+Snapshot bảng xếp hạng sau từng vòng.
+
+| Cột                | Mô tả             |
+| ------------------ | ----------------- |
+| accumulated_points | Tổng đến round đó |
+| rank_position      | Thứ hạng          |
+
+UNIQUE(player_id, season_id, round_number)
+
+Dùng để:
+
+* Xem lịch sử thứ hạng
+* Vẽ biểu đồ progression
+
+---
+
+## team_standings
+
+Bảng xếp hạng đội.
+
+| Cột          | Mô tả    |
+| ------------ | -------- |
+| total_points | Điểm đội |
+| match_wins   |          |
+| set_wins     |          |
+
+UNIQUE(season_id, team_id)
+
+---
+
+# IV. Luồng Nghiệp Vụ Chuẩn
+
+---
+
+# 1️⃣ Nhập kết quả trận
+
+Insert:
+
+* sub_matches
+* match_player_points
+
+Update:
+
+* matches.status = COMPLETED
+
+---
+
+# 2️⃣ Finalize Round (Transaction bắt buộc)
+
+Flow:
+
+1. Kiểm tra round đang OPEN
+2. Update round → FINALIZED
+3. Insert player_round_points
+4. Snapshot player_round_standings (RANK() window function)
+5. Update player_ratings.accumulated_points
+6. Update rating points
+7. Tính rank mới theo buffer ±25
+8. Insert player_rank_history nếu đổi hạng
+9. Update team_standings
+
+Toàn bộ phải chạy trong 1 transaction.
+
+---
+
+# V. Rank Buffer ±25 (State Machine)
+
+Rule:
+
+Promotion:
+points >= max_points + promotion_buffer
+
+Relegation:
+points < min_points - relegation_buffer
+
+Rank không được tính trực tiếp từ khoảng điểm.
+
+---
+
+# VI. Performance Strategy
+
+* Không SUM realtime
+* Snapshot sau mỗi round
+* Index quan trọng:
 
 ```sql
-CREATE TABLE players (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  full_name TEXT NOT NULL,
-  birth_year INT,
-  phone TEXT,
-  cccd TEXT,
-  avatar_url TEXT,
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMP DEFAULT now()
-);
-```
-
-⚠️ **Không lưu điểm, không lưu đội, không lưu mùa giải**
-
----
-
-### 3.4 seasons – Mùa giải
-
-```sql
-CREATE TABLE seasons (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  year INT,
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMP DEFAULT now()
-);
+INDEX(player_id, season_id)
+INDEX(season_id, round_number)
+INDEX(match_id)
+INDEX(team_id)
 ```
 
 ---
 
-### 3.5 player_seasons – VĐV theo mùa giải (QUAN TRỌNG)
-
-```sql
-CREATE TABLE player_seasons (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  season_id UUID REFERENCES seasons(id),
-  player_id UUID REFERENCES players(id),
-  team_id UUID REFERENCES teams(id),
-  rank_id VARCHAR(10) REFERENCES ranks(id),
-  accumulated_points NUMERIC(10,2) DEFAULT 0,
-  status TEXT DEFAULT 'ACTIVE',
-  display_order INT,
-  UNIQUE (season_id, player_id)
-);
-```
-
-👉 **Tất cả điểm, hạng, trạng thái đều nằm ở đây**
+# VII. API Design Mapping (Cho BE Go)
 
 ---
 
-### 3.6 player_point_logs – Nhật ký điểm (AUDIT)
+## Season
 
-```sql
-CREATE TABLE player_point_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  player_season_id UUID REFERENCES player_seasons(id),
-  delta_points NUMERIC(10,2),
-  reason TEXT,
-  source TEXT, -- MATCH, ADMIN_ADJUST
-  ref_id UUID,
-  created_at TIMESTAMP DEFAULT now()
-);
-```
-
-Dùng cho:
-
-* Truy vết gian lận
-* Rollback
-* Thống kê
+POST /seasons
+POST /seasons/{id}/start
+POST /seasons/{id}/finish
 
 ---
 
-### 3.7 fixtures – Đối đầu CLB
+## Teams
 
-```sql
-CREATE TABLE fixtures (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  season_id UUID REFERENCES seasons(id),
-  round INT,
-  home_team_id UUID REFERENCES teams(id),
-  guest_team_id UUID REFERENCES teams(id),
-  home_score INT DEFAULT 0,
-  guest_score INT DEFAULT 0,
-  status TEXT DEFAULT 'SCHEDULED'
-);
-```
+POST /seasons/{id}/teams
+POST /teams/{id}/add-player
+POST /teams/{id}/transfer
 
 ---
 
-### 3.8 matches – Trận đấu con
+## Matches
 
-```sql
-CREATE TABLE matches (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  fixture_id UUID REFERENCES fixtures(id) ON DELETE CASCADE,
-  match_order INT,
-  match_type TEXT, -- SINGLE / DOUBLE
-  home_player1_id UUID REFERENCES players(id),
-  home_player2_id UUID REFERENCES players(id),
-  guest_player1_id UUID REFERENCES players(id),
-  guest_player2_id UUID REFERENCES players(id),
-  handicap_snapshot TEXT,
-  home_sets INT[],
-  guest_sets INT[],
-  winner_team_id UUID REFERENCES teams(id)
-);
-```
+POST /matches
+POST /matches/{id}/sub-match
+POST /matches/{id}/complete
 
 ---
 
-## 4. Import dữ liệu
+## Round Control
 
-### 4.1 staging_players (import tạm)
-
-```sql
-CREATE TABLE staging_players (
-  vdv_ten TEXT,
-  nam_sinh INT,
-  vdv_hang TEXT,
-  diem_tich_luy NUMERIC,
-  doi_bong_ten TEXT,
-  mua_giai_ten TEXT,
-  trang_thai_thi_dau TEXT,
-  stt INT
-);
-```
-
-### 4.2 Import vào player_seasons
-
-```sql
-INSERT INTO player_seasons (...)
-SELECT ...
-FROM staging_players s
-JOIN players p ...
-JOIN seasons se ...
-LEFT JOIN teams t ...
-ON CONFLICT (season_id, player_id) DO NOTHING;
-```
+POST /seasons/{id}/rounds/{round}/finalize
 
 ---
 
-## 5. Query mẫu thường dùng
+## Leaderboard
 
-### BXH mùa giải
-
-```sql
-SELECT p.full_name, ps.accumulated_points, r.id AS rank
-FROM player_seasons ps
-JOIN players p ON p.id = ps.player_id
-JOIN ranks r ON r.id = ps.rank_id
-WHERE ps.season_id = :season_id
-ORDER BY ps.accumulated_points DESC;
-```
-
-### Cộng điểm + log
-
-```sql
-UPDATE player_seasons
-SET accumulated_points = accumulated_points + :delta
-WHERE id = :ps_id;
-
-INSERT INTO player_point_logs (...);
-```
+GET /seasons/{id}/leaderboard
+GET /seasons/{id}/rounds/{round}/leaderboard
+GET /players/{id}/history
 
 ---
 
-## 6. Nguyên tắc vận hành
+# VIII. Kiến Trúc Đạt Được
 
-* ❌ Không update trực tiếp players.accumulated_points
-* ✅ Mọi thay đổi điểm phải có log
-* ✅ Rank có thể override bởi BTC
-* ✅ Không xóa dữ liệu đã thi đấu
+Hệ thống hiện tại:
 
----
-
-## 7. Phù hợp cho Flutter + Go
-
-* Flutter: chỉ gọi API, không logic điểm
-* Go: service layer tính điểm + transaction
-* DB: source of truth
-
----
-
-## 8. Hướng mở rộng
-
-* ELO rating
-* Playoff
-* Multiple division
-* Sponsor / MVP analytics
-
----
-
-📌 **Tài liệu này đủ dùng cho production & mở rộng lâu dài**
+* Multi-season
+* Transfer giữa đội
+* Rating ELO
+* Buffer chống nhảy hạng
+* Snapshot ranking từng vòng
+* Snapshot ranking toàn mùa
+* Audit lịch sử lên/xuống hạng
+* Tối ưu performance cho production

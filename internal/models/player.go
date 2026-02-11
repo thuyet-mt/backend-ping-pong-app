@@ -12,3 +12,10 @@ type Player struct {
 	IsActive  bool      `json:"is_active"`
 	CreatedAt time.Time `json:"created_at"`
 }
+
+type PlayerListResponse struct {
+	FullName  string `json:"full_name"`
+	BirthYear *int   `json:"birth_year"`
+	//Phone     *string `json:"phone"`
+	AvatarPath *string `json:"avatar_url"`
+}
