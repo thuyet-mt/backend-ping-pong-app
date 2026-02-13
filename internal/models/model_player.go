@@ -14,8 +14,8 @@ type Player struct {
 }
 
 type PlayerListResponse struct {
-	FullName  string `json:"full_name"`
-	BirthYear *int   `json:"birth_year"`
+	FullName    string     `json:"full_name"`
+	DateOfBirth *time.Time `json:"date_of_birth"`
 	//Phone     *string `json:"phone"`
 	AvatarPath *string `json:"avatar_url"`
 }

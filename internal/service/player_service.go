@@ -39,9 +39,9 @@ func (s *playerService) GetAllPlayerService(ctx context.Context) ([]models.Playe
 			avatarPath = &url
 		}
 		res = append(res, models.PlayerListResponse{
-			FullName:   p.FullName,
-			BirthYear:  p.BirthYear,
-			AvatarPath: avatarPath,
+			FullName:    p.FullName,
+			DateOfBirth: p.DateOfBirth,
+			AvatarPath:  avatarPath,
 		})
 	}
 	return res, nil
@@ -64,9 +64,9 @@ func (s *playerService) SearchPlayerByNameService(ctx context.Context, name stri
 			avatarPath = &url
 		}
 		res = append(res, models.PlayerListResponse{
-			FullName:   p.FullName,
-			BirthYear:  p.BirthYear,
-			AvatarPath: avatarPath,
+			FullName:    p.FullName,
+			DateOfBirth: p.DateOfBirth,
+			AvatarPath:  avatarPath,
 		})
 	}
 	return res, nil

@@ -11,6 +11,10 @@ type playerRepository struct {
 	db *sql.DB
 }
 
+func NewPlayerRepository(db *sql.DB) PlayerRepository {
+	return &playerRepository{db: db}
+}
+
 type PlayerRepository interface {
 	GetAllPlayerRepo(ctx context.Context) ([]models.PlayerListResponse, error)
 	SearchByNameRepo(ctx context.Context, name string) ([]models.PlayerListResponse, error)
@@ -21,7 +25,7 @@ func (r *playerRepository) GetAllPlayerRepo(ctx context.Context) ([]models.Playe
 	queryGetAllPlayer := `
 		SELECT
 			full_name,
-			birth_year,
+			date_of_birth,
 			avatar_url
 		FROM players
 		ORDER BY created_at DESC;`
@@ -37,7 +41,7 @@ func (r *playerRepository) GetAllPlayerRepo(ctx context.Context) ([]models.Playe
 		var p models.PlayerListResponse
 		if err := rows.Scan(
 			&p.FullName,
-			&p.BirthYear,
+			&p.DateOfBirth,
 			&p.AvatarPath,
 		); err != nil {
 			return nil, err
@@ -87,7 +91,7 @@ func (r *playerRepository) SearchByNameRepo(ctx context.Context, name string) ([
 	querySearchByName := `
 		SELECT 
 			full_name,
-			birth_year,
+			date_of_birth,
 			avatar_url
 		FROM players 
 		WHERE full_name ILIKE '%' || $1 || '%'
@@ -103,7 +107,7 @@ func (r *playerRepository) SearchByNameRepo(ctx context.Context, name string) ([
 		var p models.PlayerListResponse
 		if err := rows.Scan(
 			&p.FullName,
-			&p.BirthYear,
+			&p.DateOfBirth,
 			&p.AvatarPath,
 		); err != nil {
 			return nil, err
@@ -121,7 +125,7 @@ func (r *playerRepository) CreatePlayerRepo(ctx context.Context, p *models.Playe
 	return r.db.QueryRowContext(ctx, `
 		INSERT INTO players (
 			full_name,
-			birth_year,
+			date_of_birth,
 			phone,
 			cccd,
 			avatar_url
