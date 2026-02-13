@@ -6,14 +6,15 @@ import (
 
 	"backend-ping-pong-app/internal/models"
 	"backend-ping-pong-app/internal/repository"
+	"backend-ping-pong-app/internal/utils"
 )
 
 var ErrInvalidPlayerName = errors.New("full_name is required")
 
 type PlayerService interface {
-	GetAll(ctx context.Context) ([]models.Player, error)
-	GetByID(ctx context.Context, id string) (*models.Player, error)
-	Create(ctx context.Context, p *models.Player) (*models.Player, error)
+	GetAllPlayerService(ctx context.Context) ([]models.PlayerListResponse, error)
+	SearchPlayerByNameService(ctx context.Context, name string) ([]models.PlayerListResponse, error)
+	CreatePlayerService(ctx context.Context, p *models.Player) (*models.Player, error)
 }
 
 type playerService struct {
@@ -24,23 +25,59 @@ func NewPlayerService(repo repository.PlayerRepository) PlayerService {
 	return &playerService{repo: repo}
 }
 
-func (s *playerService) GetAll(ctx context.Context) ([]models.Player, error) {
-	return s.repo.GetAll(ctx)
-}
-
-func (s *playerService) GetByID(ctx context.Context, id string) (*models.Player, error) {
-	if id == "" {
-		return nil, errors.New("id is required")
+func (s *playerService) GetAllPlayerService(ctx context.Context) ([]models.PlayerListResponse, error) {
+	items, err := s.repo.GetAllPlayerRepo(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return s.repo.GetByID(ctx, id)
+
+	res := make([]models.PlayerListResponse, 0, len(items))
+	for _, p := range items {
+		var avatarPath *string
+		if p.AvatarPath != nil {
+			url := utils.BuildCDNURL(*p.AvatarPath)
+			avatarPath = &url
+		}
+		res = append(res, models.PlayerListResponse{
+			FullName:    p.FullName,
+			DateOfBirth: p.DateOfBirth,
+			AvatarPath:  avatarPath,
+		})
+	}
+	return res, nil
 }
 
-func (s *playerService) Create(ctx context.Context, p *models.Player) (*models.Player, error) {
+func (s *playerService) SearchPlayerByNameService(ctx context.Context, name string) ([]models.PlayerListResponse, error) {
+	if name == "" {
+		return nil, errors.New("Name is required")
+	}
+	items, err := s.repo.SearchByNameRepo(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	res := make([]models.PlayerListResponse, 0, len(items))
+	for _, p := range items {
+		var avatarPath *string
+		if p.AvatarPath != nil {
+			url := utils.BuildCDNURL(*p.AvatarPath)
+			avatarPath = &url
+		}
+		res = append(res, models.PlayerListResponse{
+			FullName:    p.FullName,
+			DateOfBirth: p.DateOfBirth,
+			AvatarPath:  avatarPath,
+		})
+	}
+	return res, nil
+}
+
+func (s *playerService) CreatePlayerService(ctx context.Context, p *models.Player) (*models.Player, error) {
 	if p.FullName == "" {
 		return nil, ErrInvalidPlayerName
 	}
 
-	if err := s.repo.Create(ctx, p); err != nil {
+	if err := s.repo.CreatePlayerRepo(ctx, p); err != nil {
 		return nil, err
 	}
 
