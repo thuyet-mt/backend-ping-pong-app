@@ -1,11 +1,12 @@
 package models
 
 // Team represents a team in a season
+
 type Team struct {
-	ID       string `json:"id"`
-	SeasonID string `json:"season_id"`
-	Name     string `json:"name"`
-	Avatar   string `json:"avatar_url"`
+	ID        string  `json:"id"`
+	SeasonID  string  `json:"season_id"`
+	Name      string  `json:"name"`
+	AvatarURL *string `json:"avatar_url"`
 }
 
 // TeamMember represents a player membership in a team

@@ -41,7 +41,7 @@ func (r *teamRepository) GetTeamsBySeasonIDRepo(ctx context.Context, seasonID st
 			&team.ID,
 			&team.SeasonID,
 			&team.Name,
-			&team.Avatar,
+			&team.AvatarURL,
 		)
 		if err != nil {
 			return nil, err
@@ -59,7 +59,7 @@ func (r *teamRepository) GetTeamsBySeasonIDRepo(ctx context.Context, seasonID st
 func (r *teamRepository) GetTeamByIDRepo(ctx context.Context, id string) (*models.Team, error) {
 	var team models.Team
 	err := r.db.QueryRowContext(ctx, `
-		SELECT id, season_id, name
+		SELECT id, season_id, name, avatar_url
 		FROM teams
 		WHERE id = $1
 	`, id).Scan(

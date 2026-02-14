@@ -6,6 +6,7 @@ import (
 
 	"backend-ping-pong-app/internal/models"
 	"backend-ping-pong-app/internal/repository"
+	"backend-ping-pong-app/internal/utils"
 )
 
 var ErrTeamNotFound = errors.New("team not found")
@@ -33,9 +34,15 @@ func (s *teamService) GetTeamsBySeasonIDService(ctx context.Context, seasonID st
 
 	response := make([]models.TeamListResponse, 0, len(teams))
 	for _, team := range teams {
+		var avatarPath *string
+		if team.AvatarURL != nil {
+			url := utils.BuildCDNURL(*team.AvatarURL)
+			avatarPath = &url
+		}
 		response = append(response, models.TeamListResponse{
-			ID:   team.ID,
-			Name: team.Name,
+			ID:        team.ID,
+			Name:      team.Name,
+			AvatarURL: avatarPath,
 		})
 	}
 	return response, nil
